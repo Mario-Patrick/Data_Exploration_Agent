@@ -8,25 +8,23 @@ This repository will be the home for the Data Exploration Agent inclusive of the
     ```
     (Replace <repository-url> with the actual URL for the repository.)
 
-2. Change directory to the Application
+2. Open a bash terminal and navigate to the project directory
    ```bash
    cd ./pipeline_JL/AI_Data_Explorer
    ```
-3. Create a .venv with python 3.12 (you need ot have python 3.12 installed)
+3. Run the setup script (this will automatically install python 3.12 if you did not have it)
    ```bash
-   py -3.12 -m venv venv
+   ./start.sh
    ```
-4. Install required Python dependencies for both backend and frontend:
+4. <b>ONLY</b> If you didnt have the correct python version, after install, open a new terminal and run the script again. 
    ```bash
-   pip install -r requirements.txt
+   cd ./pipeline_JL/AI_Data_Explorer
+   ./start.sh
    ```
-5. Run the backend
-    ```bash
-    python app.py
-    ```
-
-6. Run the frontend
-    ```bash
-    cd ./frontend
-    npm run dev
-    ```
+5. The frontend should be accesible in a browser at <b>localhost:5173</b>
+6. <b>After initial install</b> if you just want to run the application after everything is set up, you can run:
+   ```bash
+   cd ./pipeline_JL/AI_Data_Explorer
+   ./serve.sh
+   ```
+7. You will need a .env file with a Deepseek api key. DEEPSEEK_API_KEY=. Ask me for it and i will give you
