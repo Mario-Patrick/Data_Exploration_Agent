@@ -77,7 +77,7 @@ You MUST respond with valid JSON that matches this schema exactly:
 
 Rules:
 - Use ONLY column names that appear in the provided CSV header. Do not invent column names.
-- Recommend as many graphs as are genuinely useful (typically 3–6). Do not pad with redundant charts.
+- Recommend as many graphs as are genuinely useful (typically 2–5). Do not pad with redundant charts.
 - For type "histogram": include only "x", omit "y" and "agg" fields entirely.
 - For type "bar": always include "agg" (how to aggregate y per x category). Omit "color".
 - For type "scatter": include "x" and "y". "color" is optional — omit if not needed. Only use scatter when BOTH axes are truly continuous numeric columns. Use when both columns either have decimal precision or are very large integers.
@@ -122,6 +122,7 @@ def upload():
         "row_count": len(df),
         "columns": list(df.columns),
     })
+
 
 
 @app.route("/api/explore/<dataset_id>", methods=["POST"])
