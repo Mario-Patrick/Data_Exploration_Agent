@@ -1,6 +1,9 @@
 # pipeline_JL - AI Data Explorer
 
-# Dependencies
+# Dependencies (global patterns for reliability)
+node_modules/
+
+# pipeline_JL specific
 pipeline_JL/AI_Data_Explorer/frontend/node_modules/
 
 # Build output
