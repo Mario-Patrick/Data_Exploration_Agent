@@ -1,0 +1,45 @@
+# pipeline_JL - AI Data Explorer
+
+# Dependencies
+pipeline_JL/AI_Data_Explorer/frontend/node_modules/
+
+# Build output
+pipeline_JL/AI_Data_Explorer/frontend/dist/
+pipeline_JL/AI_Data_Explorer/frontend/.vite/
+
+# Python
+pipeline_JL/**/__pycache__/
+pipeline_JL/**/*.py[cod]
+pipeline_JL/**/*.pyo
+pipeline_JL/**/.Python
+pipeline_JL/**/venv/
+pipeline_JL/**/.venv/
+pipeline_JL/**/env/
+pipeline_JL/**/.env/
+pipeline_JL/**/*.egg-info/
+pipeline_JL/**/.eggs/
+pipeline_JL/**/*.egg
+
+# Environment & secrets
+pipeline_JL/**/.env
+pipeline_JL/**/.env.local
+pipeline_JL/**/.env.*.local
+
+# Runtime data
+pipeline_JL/AI_Data_Explorer/uploads/
+pipeline_JL/AI_Data_Explorer/logs/
+pipeline_JL/AI_Data_Explorer/garbage/
+pipeline_JL/AI_Data_Explorer/datasets.json
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Logs (general)
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
