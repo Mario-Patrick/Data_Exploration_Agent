@@ -117,6 +117,8 @@ body {
 .main-area {
   flex: 1 1 0;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -182,6 +184,12 @@ body {
   gap: 12px;
 }
 
+/* Panel view — table variant: higher specificity (two classes) beats .panel-view's overflow-y: auto */
+.panel-view.panel-view--table {
+  padding: 0;
+  overflow: hidden;
+}
+
 /* Data table */
 .data-table-wrap {
   flex: 1 1 0;
@@ -199,24 +207,41 @@ body {
   overflow: auto;
 }
 
-/* Radix Table — sticky header. ScrollArea viewport fix for sticky (see radix-ui/primitives#2783) */
-.data-table-scroll [data-radix-scroll-area-viewport] > div {
-  display: block !important;
-}
-
+/* Radix Table — sticky header */
 .data-table-scroll .rt-TableColumnHeaderCell {
   position: sticky;
   top: 0;
   background: var(--color-panel) !important;
   z-index: 1;
   box-shadow: 0 1px 0 var(--gray-a4);
+  /* needed for resize handle positioning */
+  position: sticky;
+  overflow: visible;
+  white-space: nowrap;
 }
 
 .data-table-scroll .rt-TableCell {
-  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Column resize handle */
+.col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 2;
+}
+
+.col-resize-handle:hover,
+.col-resize-handle:active {
+  background: var(--accent-8);
+  opacity: 0.6;
 }
 
 .data-table-footer {

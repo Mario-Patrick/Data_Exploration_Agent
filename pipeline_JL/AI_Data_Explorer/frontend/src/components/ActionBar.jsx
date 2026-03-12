@@ -10,6 +10,8 @@ export default function ActionBar({
   onMessage,
   onLogRefresh,
   onSwitchToChat,
+  pendingRegexEdit,
+  onRegexEditConsumed,
 }) {
   return (
     <div className="chat-float-bar">
@@ -34,9 +36,12 @@ export default function ActionBar({
             <Tabs.Content value="cleaning">
               <CleaningTab
                 datasetId={activeDataset.id}
+                columns={activeDataset.columns}
                 onMessage={onMessage}
                 onLogRefresh={onLogRefresh}
                 onSwitchToChat={onSwitchToChat}
+                pendingRegexEdit={pendingRegexEdit}
+                onRegexEditConsumed={onRegexEditConsumed}
               />
             </Tabs.Content>
 

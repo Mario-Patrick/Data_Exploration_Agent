@@ -38,7 +38,7 @@ export default function App() {
       .then((r) => r.json())
       .then((list) => {
         if (!Array.isArray(list) || list.length === 0) return;
-        setDatasets(list.map((d) => ({ id: d.id, name: d.name })));
+        setDatasets(list.map((d) => ({ id: d.id, name: d.name, columns: d.columns ?? [] })));
         // Seed each restored dataset with a placeholder message
         const seeded = {};
         for (const d of list) seeded[d.id] = [{ ...RESTORED_MSG, id: nextId++ }];
@@ -66,6 +66,15 @@ export default function App() {
   // Used by CleaningTab / ExplorationTab — always has an activeDataset
   const appendMessage = (msg) => {
     if (activeDataset) appendMessageToDataset(activeDataset.id, msg);
+  };
+
+  const [pendingRegexEdit, setPendingRegexEdit] = useState(null);
+
+  const handleAction = (action) => {
+    if (action.type === 'edit_regex') {
+      setPendingRegexEdit({ column: action.column, pattern: action.pattern });
+      setActiveTab('chat');
+    }
   };
 
   const handleLogRefresh = () => {
@@ -98,7 +107,7 @@ export default function App() {
       } else {
         const ds = { id: json.dataset_id, name: file.name, columns: json.columns };
         setActiveDataset(ds);
-        setDatasets((prev) => [...prev, { id: ds.id, name: ds.name }]);
+        setDatasets((prev) => [...prev, { id: ds.id, name: ds.name, columns: ds.columns }]);
         setActiveTab('chat');
 
         // Seed the new dataset's chat
@@ -138,11 +147,7 @@ export default function App() {
     const ds = datasets.find((d) => d.id === id);
     if (!ds || activeDataset?.id === id) return;
     // Restore full columns from the already-fetched list if available
-    setActiveDataset((prev) => ({
-      id: ds.id,
-      name: ds.name,
-      columns: prev?.id === id ? prev.columns : [],
-    }));
+    setActiveDataset({ id: ds.id, name: ds.name, columns: ds.columns ?? [] });
     setLogRefreshKey((k) => k + 1);
   };
 
@@ -165,7 +170,7 @@ export default function App() {
     return (
       <div className="chat-layout">
         {header}
-        <ChatWindow messages={currentMessages} loading={loading} />
+        <ChatWindow messages={currentMessages} loading={loading} onAction={handleAction} />
         <ActionBar
           activeDataset={null}
           loading={loading}
@@ -173,6 +178,8 @@ export default function App() {
           onMessage={appendMessage}
           onLogRefresh={handleLogRefresh}
           onSwitchToChat={() => setActiveTab('chat')}
+          pendingRegexEdit={pendingRegexEdit}
+          onRegexEditConsumed={() => setPendingRegexEdit(null)}
         />
       </div>
     );
@@ -209,7 +216,7 @@ export default function App() {
         <div className="tab-content-area">
           {activeTab === 'chat' && (
             <div className="chat-tab">
-              <ChatWindow messages={currentMessages} loading={loading} />
+              <ChatWindow messages={currentMessages} loading={loading} onAction={handleAction} />
               <ActionBar
                 activeDataset={activeDataset}
                 loading={loading}
@@ -217,6 +224,8 @@ export default function App() {
                 onMessage={appendMessage}
                 onLogRefresh={handleLogRefresh}
                 onSwitchToChat={() => setActiveTab('chat')}
+                pendingRegexEdit={pendingRegexEdit}
+                onRegexEditConsumed={() => setPendingRegexEdit(null)}
               />
             </div>
           )}

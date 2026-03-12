@@ -1,5 +1,8 @@
 import os
-import re
+try:
+    import regex as re
+except ImportError:
+    import re
 import uuid
 import json
 import unicodedata
@@ -480,6 +483,167 @@ def preprocess(dataset_id):
     df.to_csv(csv_path, index=False)
 
     return jsonify({"steps_run": steps_to_run, "results": results})
+
+
+REGEX_SUGGEST_SYSTEM = """You are a data quality expert. Given a column name and sample values from a CSV dataset, suggest a single regex pattern that matches the expected valid format of that column's data.You may also be given additional instructions from the user that will be very important to consider and mention in your reasoning.
+
+You MUST respond with valid JSON only:
+{"pattern": "<regex pattern>", "reason": "<one sentence explaining the pattern>"}
+
+Rules:
+- The pattern should use Python fullmatch semantics (it must match the entire string). The backend validates using the third-party `regex` library's `fullmatch()`.
+- Keep the pattern practical and not overly strict.
+- No markdown, no code fences, no commentary outside the JSON object."""
+
+
+@app.route("/api/clean/<dataset_id>/regex-suggest", methods=["POST"])
+def regex_suggest(dataset_id):
+    if dataset_id not in datasets:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    csv_path = os.path.join(UPLOADS_DIR, f"{dataset_id}.csv")
+    if not os.path.exists(csv_path):
+        return jsonify({"error": "Dataset file not found on disk"}), 404
+
+    body = request.get_json() or {}
+    column = body.get("column")
+    hint = body.get("hint", "").strip()
+    previous_pattern = body.get("previous_pattern", "").strip()
+    if not column:
+        return jsonify({"error": "column is required"}), 400
+
+    df = pd.read_csv(csv_path)
+    if column not in df.columns:
+        return jsonify({"error": f"Column '{column}' not found"}), 400
+
+    samples = df[column].dropna().astype(str).unique()[:30].tolist()
+    suggest_line = "Additional user instructions: " + hint if hint else ""
+    user_message = f'Column name: "{column}"\nSample values: {samples}\n\n{suggest_line}'
+    if previous_pattern:
+        user_message += f"\n\nPrevious regex (refine or replace this): /{previous_pattern}/"
+
+    print("[regex-suggest] Prompt (system):", REGEX_SUGGEST_SYSTEM)
+    print("[regex-suggest] Prompt (user):", user_message)
+
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": REGEX_SUGGEST_SYSTEM},
+                {"role": "user", "content": user_message},
+            ],
+            stream=False,
+        )
+        raw_content = response.choices[0].message.content
+        print("[regex-suggest] AI raw response:", raw_content)
+        result = json.loads(raw_content)
+    except json.JSONDecodeError as e:
+        return jsonify({"error": f"DeepSeek returned invalid JSON: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"DeepSeek API error: {str(e)}"}), 500
+
+    return jsonify({"pattern": result.get("pattern", ""), "reason": result.get("reason", "")})
+
+
+@app.route("/api/clean/<dataset_id>/regex-check", methods=["POST"])
+def regex_check(dataset_id):
+    if dataset_id not in datasets:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    csv_path = os.path.join(UPLOADS_DIR, f"{dataset_id}.csv")
+    if not os.path.exists(csv_path):
+        return jsonify({"error": "Dataset file not found on disk"}), 404
+
+    body = request.get_json() or {}
+    column = body.get("column")
+    pattern = body.get("pattern", "").strip()
+
+    if not column:
+        return jsonify({"error": "column is required"}), 400
+    if not pattern:
+        return jsonify({"error": "pattern is required"}), 400
+
+    try:
+        compiled = re.compile(pattern, re.UNICODE)
+    except (re.error, ValueError, OverflowError) as e:
+        return jsonify({"error": f"Invalid regex: {str(e)}"}), 400
+
+    try:
+        df = pd.read_csv(csv_path)
+        if column not in df.columns:
+            return jsonify({"error": f"Column '{column}' not found"}), 400
+
+        col_str = df[column].fillna('').astype(str)
+
+        def safe_fullmatch(x):
+            try:
+                return bool(compiled.fullmatch(x))
+            except Exception:
+                return False
+
+        mask = col_str.apply(safe_fullmatch)
+
+        def clean_examples(series):
+            import math
+            return [
+                v for v in series.unique()[:5].tolist()
+                if not (isinstance(v, float) and math.isnan(v))
+            ]
+
+        match_examples = clean_examples(col_str[mask])
+        no_match_examples = clean_examples(col_str[~mask])
+    except Exception as e:
+        return jsonify({"error": f"Regex check failed: {str(e)}"}), 500
+
+    # Persist pattern + last-run stats for this column
+    if "regex_patterns" not in datasets[dataset_id]:
+        datasets[dataset_id]["regex_patterns"] = {}
+    datasets[dataset_id]["regex_patterns"][column] = {
+        "pattern": pattern,
+        "match_count": int(mask.sum()),
+        "no_match_count": int((~mask).sum()),
+    }
+    save_registry()
+
+    log_action(dataset_id, f"Regex check on '{column}': pattern /{pattern}/ — {int(mask.sum())} match, {int((~mask).sum())} no-match")
+
+    return jsonify({
+        "column": column,
+        "pattern": pattern,
+        "match_count": int(mask.sum()),
+        "no_match_count": int((~mask).sum()),
+        "match_examples": match_examples,
+        "no_match_examples": no_match_examples,
+    })
+
+
+@app.route("/api/clean/<dataset_id>/regex-patterns", methods=["GET"])
+def get_regex_patterns(dataset_id):
+    if dataset_id not in datasets:
+        return jsonify({"error": "Dataset not found"}), 404
+    return jsonify(datasets[dataset_id].get("regex_patterns", {}))
+
+
+@app.route("/api/clean/<dataset_id>/column-samples", methods=["GET"])
+def column_samples(dataset_id):
+    if dataset_id not in datasets:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    column = request.args.get("column")
+    if not column:
+        return jsonify({"error": "column is required"}), 400
+
+    csv_path = os.path.join(UPLOADS_DIR, f"{dataset_id}.csv")
+    if not os.path.exists(csv_path):
+        return jsonify({"error": "Dataset file not found on disk"}), 404
+
+    df = pd.read_csv(csv_path, usecols=[column], nrows=500)
+    if column not in df.columns:
+        return jsonify({"error": f"Column '{column}' not found"}), 400
+
+    samples = df[column].dropna().astype(str).unique()[:20].tolist()
+    return jsonify({"samples": samples})
 
 
 # Serve React build in production

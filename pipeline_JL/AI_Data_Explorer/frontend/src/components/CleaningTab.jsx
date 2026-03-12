@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Checkbox, Flex, Popover, Text } from '@radix-ui/themes';
+import ColumnCleaningDialog from './ColumnCleaningDialog';
 
 const PREPROCESS_STEPS = [
   { key: 'standardize_headers', label: 'Standardize column headers (snake_case)' },
@@ -11,7 +12,7 @@ const PREPROCESS_STEPS = [
 
 const ALL_STEP_KEYS = PREPROCESS_STEPS.map((s) => s.key);
 
-export default function CleaningTab({ datasetId, onMessage, onLogRefresh, onSwitchToChat }) {
+export default function CleaningTab({ datasetId, columns, onMessage, onLogRefresh, onSwitchToChat, pendingRegexEdit, onRegexEditConsumed }) {
   const [running, setRunning] = useState(false);
   const [selectedSteps, setSelectedSteps] = useState(ALL_STEP_KEYS);
 
@@ -129,6 +130,19 @@ export default function CleaningTab({ datasetId, onMessage, onLogRefresh, onSwit
         <Button size="2" variant="soft" onClick={handleDuplicates} disabled={running}>
           {running ? 'Running…' : 'Remove Duplicates'}
         </Button>
+        <ColumnCleaningDialog
+          datasetId={datasetId}
+          columns={columns || []}
+          onMessage={onMessage}
+          onSwitchToChat={onSwitchToChat}
+          onLogRefresh={onLogRefresh}
+          externalEdit={pendingRegexEdit}
+          onConsumeExternalEdit={onRegexEditConsumed}
+        >
+          <Button size="2" variant="soft" disabled={running}>
+            Regex
+          </Button>
+        </ColumnCleaningDialog>
       </Flex>
     </div>
   );
