@@ -32,6 +32,7 @@ pipeline_JL/**/.env.*.local
 pipeline_JL/AI_Data_Explorer/uploads/
 pipeline_JL/AI_Data_Explorer/logs/
 pipeline_JL/AI_Data_Explorer/garbage/
+pipeline_JL/AI_Data_Explorer/regex_results/
 pipeline_JL/AI_Data_Explorer/datasets.json
 
 # IDE & OS

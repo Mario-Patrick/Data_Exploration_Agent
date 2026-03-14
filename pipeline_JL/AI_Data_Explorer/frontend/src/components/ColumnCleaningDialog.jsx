@@ -126,6 +126,7 @@ export default function ColumnCleaningDialog({
       onMessage({
         type: 'assistant',
         regexResult: {
+          datasetId,
           column: json.column,
           pattern: json.pattern,
           match_count: json.match_count,

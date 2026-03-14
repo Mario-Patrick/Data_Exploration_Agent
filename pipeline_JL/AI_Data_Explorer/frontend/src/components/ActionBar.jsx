@@ -48,6 +48,7 @@ export default function ActionBar({
             <Tabs.Content value="exploration">
               <ExplorationTab
                 datasetId={activeDataset.id}
+                rowCount={activeDataset.row_count ?? 0}
                 onMessage={onMessage}
                 onSwitchToChat={onSwitchToChat}
               />

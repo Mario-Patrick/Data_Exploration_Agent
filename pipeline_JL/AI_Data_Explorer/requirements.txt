@@ -4,3 +4,5 @@ flask
 flask-cors
 pandas
 regex
+pyarrow
+duckdb

@@ -38,13 +38,13 @@ export default function App() {
       .then((r) => r.json())
       .then((list) => {
         if (!Array.isArray(list) || list.length === 0) return;
-        setDatasets(list.map((d) => ({ id: d.id, name: d.name, columns: d.columns ?? [] })));
+        setDatasets(list.map((d) => ({ id: d.id, name: d.name, columns: d.columns ?? [], row_count: d.row_count ?? 0 })));
         // Seed each restored dataset with a placeholder message
         const seeded = {};
         for (const d of list) seeded[d.id] = [{ ...RESTORED_MSG, id: nextId++ }];
         setChatHistory(seeded);
         const last = list[list.length - 1];
-        setActiveDataset({ id: last.id, name: last.name, columns: last.columns ?? [] });
+        setActiveDataset({ id: last.id, name: last.name, columns: last.columns ?? [], row_count: last.row_count ?? 0 });
       })
       .catch(() => null);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -60,6 +60,16 @@ export default function App() {
     setChatHistory((prev) => ({
       ...prev,
       [dsId]: [...(prev[dsId] ?? []), { id, ...msg }],
+    }));
+  };
+
+  const updateMessageRegexResult = (msgId, newRegexResult) => {
+    if (!activeDataset) return;
+    setChatHistory((prev) => ({
+      ...prev,
+      [activeDataset.id]: (prev[activeDataset.id] ?? []).map((m) =>
+        m.id === msgId ? { ...m, regexResult: newRegexResult } : m
+      ),
     }));
   };
 
@@ -105,9 +115,9 @@ export default function App() {
       if (!res.ok) {
         if (activeDataset) appendMessageToDataset(activeDataset.id, { type: 'assistant', text: `Error: ${json.error}` });
       } else {
-        const ds = { id: json.dataset_id, name: file.name, columns: json.columns };
+        const ds = { id: json.dataset_id, name: file.name, columns: json.columns, row_count: json.row_count ?? 0 };
         setActiveDataset(ds);
-        setDatasets((prev) => [...prev, { id: ds.id, name: ds.name, columns: ds.columns }]);
+        setDatasets((prev) => [...prev, { id: ds.id, name: ds.name, columns: ds.columns, row_count: ds.row_count }]);
         setActiveTab('chat');
 
         // Seed the new dataset's chat
@@ -136,7 +146,8 @@ export default function App() {
         return next;
       });
       if (activeDataset?.id === id) {
-        setActiveDataset(remaining.length > 0 ? { id: remaining[0].id, name: remaining[0].name, columns: [] } : null);
+        const next = remaining[0];
+        setActiveDataset(remaining.length > 0 ? { id: next.id, name: next.name, columns: next.columns ?? [], row_count: next.row_count ?? 0 } : null);
       }
     } catch {
       // non-critical
@@ -147,7 +158,7 @@ export default function App() {
     const ds = datasets.find((d) => d.id === id);
     if (!ds || activeDataset?.id === id) return;
     // Restore full columns from the already-fetched list if available
-    setActiveDataset({ id: ds.id, name: ds.name, columns: ds.columns ?? [] });
+    setActiveDataset({ id: ds.id, name: ds.name, columns: ds.columns ?? [], row_count: ds.row_count ?? 0 });
     setLogRefreshKey((k) => k + 1);
   };
 
@@ -170,7 +181,7 @@ export default function App() {
     return (
       <div className="chat-layout">
         {header}
-        <ChatWindow messages={currentMessages} loading={loading} onAction={handleAction} />
+        <ChatWindow messages={currentMessages} loading={loading} onAction={handleAction} onRegexResultUpdate={updateMessageRegexResult} />
         <ActionBar
           activeDataset={null}
           loading={loading}
@@ -216,7 +227,7 @@ export default function App() {
         <div className="tab-content-area">
           {activeTab === 'chat' && (
             <div className="chat-tab">
-              <ChatWindow messages={currentMessages} loading={loading} onAction={handleAction} />
+              <ChatWindow messages={currentMessages} loading={loading} onAction={handleAction} onRegexResultUpdate={updateMessageRegexResult} />
               <ActionBar
                 activeDataset={activeDataset}
                 loading={loading}

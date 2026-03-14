@@ -3,7 +3,7 @@ import { Flex } from '@radix-ui/themes';
 import ChatMessage from './ChatMessage';
 import LoadingBubble from './LoadingBubble';
 
-export default function ChatWindow({ messages, loading, onAction }) {
+export default function ChatWindow({ messages, loading, onAction, onRegexResultUpdate }) {
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -20,7 +20,12 @@ export default function ChatWindow({ messages, loading, onAction }) {
         style={{ maxWidth: 880, margin: '0 auto', width: '100%', paddingBottom: '8rem' }}
       >
         {messages.map((msg) => (
-          <ChatMessage key={msg.id} message={msg} onAction={onAction} />
+          <ChatMessage
+            key={msg.id}
+            message={msg}
+            onAction={onAction}
+            onRegexResultUpdate={onRegexResultUpdate ? (newResult) => onRegexResultUpdate(msg.id, newResult) : undefined}
+          />
         ))}
         {loading && <LoadingBubble />}
         <div ref={bottomRef} />
