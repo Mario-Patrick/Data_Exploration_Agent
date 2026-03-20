@@ -6,10 +6,11 @@ import LeftPanel from './components/LeftPanel';
 import DataView from './components/DataView';
 import LogView from './components/LogView';
 import GarbageView from './components/GarbageView';
+import DashboardView from './components/DashboardView';
 
 let nextId = 1;
 
-const MAIN_TABS = ['chat', 'data', 'logs', 'garbage'];
+const MAIN_TABS = ['chat', 'data', 'logs', 'garbage', 'dashboard'];
 
 const WELCOME_MSG = {
   id: 0,
@@ -246,6 +247,13 @@ export default function App() {
           )}
           {activeTab === 'garbage' && (
             <GarbageView datasetId={activeDataset.id} refreshKey={logRefreshKey} />
+          )}
+          {activeTab === 'dashboard' && (
+            <DashboardView
+              datasetId={activeDataset.id}
+              rowCount={activeDataset.row_count ?? 0}
+              columns={activeDataset.columns ?? []}
+            />
           )}
         </div>
       </div>

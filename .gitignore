@@ -35,6 +35,9 @@ pipeline_JL/AI_Data_Explorer/garbage/
 pipeline_JL/AI_Data_Explorer/regex_results/
 pipeline_JL/AI_Data_Explorer/datasets.json
 
+# Large sample CSV files (exceed GitHub's 100 MB limit)
+pipeline_JL/AI_Data_Explorer/*.csv
+
 # IDE & OS
 .DS_Store
 Thumbs.db

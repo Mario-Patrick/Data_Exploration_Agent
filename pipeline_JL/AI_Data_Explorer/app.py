@@ -110,6 +110,38 @@ Rules:
 - Choose graph types that reveal genuinely different aspects of the data (distribution, correlation, comparison, composition).
 - No markdown, no code fences, no commentary outside the JSON object."""
 
+DASHBOARD_SYSTEM_PROMPT = """You are a data visualization expert and senior data analyst. Your job is to analyze a CSV dataset sample and recommend the most useful visualizations, then provide deep AI-driven insights for each chart and an overall analytical narrative.
+
+You MUST respond with valid JSON that matches this schema exactly:
+{
+  "summary": "<1-2 sentence plain English description of what this dataset contains>",
+  "dashboard_insights": "<3-5 sentence cross-chart analytical narrative: describe the most important patterns visible across all charts together, highlight correlations or contrasts between charts, and call out any actionable or notable findings a data analyst should investigate further>",
+  "graphs": [
+    {
+      "type": "<one of: bar, scatter, histogram, box>",
+      "title": "<concise chart title>",
+      "reason": "<one sentence explaining what insight this chart reveals>",
+      "insight": "<2-3 sentence data-aware analysis specific to what THIS chart shows about THIS dataset: describe the dominant pattern, any notable outliers or skew visible in the sample, and what a business user or analyst should take away from this chart>",
+      "x": "<exact column name from the dataset>",
+      "y": "<exact column name — omit this field entirely for histogram>",
+      "color": "<exact column name — omit this field entirely if not needed>",
+      "agg": "<one of: mean, sum, count — include this field only when type is bar>"
+    }
+  ]
+}
+
+Rules:
+- Use ONLY column names that appear in the provided CSV header. Do not invent column names.
+- Recommend as many graphs as are genuinely useful (typically 2–5). Do not pad with redundant charts.
+- For type "histogram": include only "x", omit "y" and "agg" fields entirely.
+- For type "bar": always include "agg" (how to aggregate y per x category). Omit "color".
+- For type "scatter": include "x" and "y". "color" is optional — omit if not needed. Only use scatter when BOTH axes are truly continuous numeric columns.
+- For type "box": "x" is a categorical column (grouping), "y" is a numeric column. Omit "color".
+- Choose graph types that reveal genuinely different aspects of the data (distribution, correlation, comparison, composition).
+- The "insight" field must be data-specific — reference the actual columns and what the sample rows suggest, not just generic chart descriptions.
+- The "dashboard_insights" field must synthesise findings across all charts, not just repeat each chart's reason.
+- No markdown, no code fences, no commentary outside the JSON object."""
+
 
 @app.route("/api/upload", methods=["POST"])
 def upload():
@@ -1199,6 +1231,146 @@ def column_samples(dataset_id):
 
 
 # Serve React build in production
+@app.route("/api/dashboard/<dataset_id>", methods=["POST"])
+def dashboard(dataset_id):
+    if dataset_id not in datasets:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    path = _dataset_path(dataset_id)
+    if not os.path.exists(path):
+        return jsonify({"error": "Dataset file not found on disk"}), 404
+
+    con = _duckdb()
+    numeric_types = _duckdb_numeric_types()
+
+    # ── Column metadata ───────────────────────────────────────────────────────
+    desc = con.execute("DESCRIBE SELECT * FROM read_parquet(?)", [path]).fetchall()
+    columns = [row[0] for row in desc]
+    type_map = {row[0]: (row[1].upper() if row[1] else "VARCHAR") for row in desc}
+
+    # Classify columns
+    numeric_cols = [c for c in columns if type_map.get(c, "").split("(")[0] in numeric_types]
+    categorical_cols = [c for c in columns if c not in numeric_cols]
+
+    # ── Per-column stats (single scan for counts; numeric aggregates separate) ─
+    # Unique + null counts for every column
+    count_exprs = ", ".join(
+        f'COUNT(DISTINCT "{_safe_col(c)}") AS "{_safe_col(c)}_n", '
+        f'COUNT(*) FILTER (WHERE "{_safe_col(c)}" IS NULL) AS "{_safe_col(c)}_null"'
+        for c in columns
+    )
+    count_row = con.execute(
+        f"SELECT {count_exprs} FROM read_parquet(?)", [path]
+    ).fetchone()
+
+    stats = {}
+    for i, col in enumerate(columns):
+        unique_count = int(count_row[i * 2] or 0)
+        null_count = int(count_row[i * 2 + 1] or 0)
+        dtype = "numeric" if col in numeric_cols else "categorical"
+        stats[col] = {"type": dtype, "unique_count": unique_count, "null_count": null_count}
+
+    # Numeric aggregates: min, max, mean
+    if numeric_cols:
+        agg_exprs = ", ".join(
+            f'MIN("{_safe_col(c)}") AS "{_safe_col(c)}_min", '
+            f'MAX("{_safe_col(c)}") AS "{_safe_col(c)}_max", '
+            f'AVG("{_safe_col(c)}") AS "{_safe_col(c)}_mean"'
+            for c in numeric_cols
+        )
+        agg_row = con.execute(
+            f"SELECT {agg_exprs} FROM read_parquet(?)", [path]
+        ).fetchone()
+        for i, col in enumerate(numeric_cols):
+            stats[col]["min"] = agg_row[i * 3]
+            stats[col]["max"] = agg_row[i * 3 + 1]
+            stats[col]["mean"] = agg_row[i * 3 + 2]
+
+    # ── Build prompt for DeepSeek (same format as /api/explore) ───────────────
+    column_info = []
+    for col in columns:
+        dtype_label = "numeric" if col in numeric_cols else "categorical"
+        n_unique = stats[col]["unique_count"]
+        column_info.append(f"  {col} ({dtype_label}, {n_unique} unique values)")
+    column_summary = "\n".join(column_info)
+
+    df_sample = con.execute("SELECT * FROM read_parquet(?) LIMIT 10", [path]).df()
+    sample_csv = df_sample.to_csv(index=False)
+
+    user_message = f"""Dataset column metadata:
+        {column_summary}
+
+        First 10 rows (CSV format):
+        {sample_csv}
+
+        Suggest the most useful visualizations for this dataset. Respond with the JSON schema only."""
+
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": DASHBOARD_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            stream=False,
+        )
+        raw = response.choices[0].message.content
+        ai_result = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return jsonify({"error": f"DeepSeek returned invalid JSON: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"DeepSeek API error: {str(e)}"}), 500
+
+    # Validate column names in graph spec
+    valid_columns = set(columns)
+    for i, graph in enumerate(ai_result.get("graphs", [])):
+        for field in ("x", "y", "color"):
+            if field in graph and graph[field] not in valid_columns:
+                return jsonify({
+                    "error": f"Graph {i+1}: unknown column '{graph[field]}' in field '{field}'. Valid columns: {list(valid_columns)}"
+                }), 500
+
+    # ── Chart data ────────────────────────────────────────────────────────────
+    body = request.get_json(silent=True) or {}
+    sample_size = int(body.get("sample_size", 0) or 0)
+    row_count = datasets[dataset_id].get("row_count", 0)
+    n = min(sample_size, row_count) if sample_size > 0 and row_count > 0 else 0
+
+    if n > 0:
+        df_chart = con.execute(
+            f"SELECT * FROM read_parquet(?) USING SAMPLE reservoir({n} ROWS)", [path]
+        ).df()
+    else:
+        df_chart = con.execute("SELECT * FROM read_parquet(?)", [path]).df()
+
+    csv_data = json.loads(df_chart.to_json(orient="records"))
+
+    log_action(dataset_id, f"Dashboard: {len(ai_result.get('graphs', []))} charts generated")
+
+    # Serialise stats — convert numpy types to plain Python
+    def _serialise(v):
+        if v is None:
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return v
+
+    serialised_stats = {
+        col: {k: (_serialise(v) if k in ("min", "max", "mean") else v) for k, v in s.items()}
+        for col, s in stats.items()
+    }
+
+    return jsonify({
+        "summary": ai_result.get("summary", ""),
+        "dashboard_insights": ai_result.get("dashboard_insights", ""),
+        "graphs": ai_result.get("graphs", []),
+        "data": csv_data,
+        "stats": serialised_stats,
+    })
+
+
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve_react(path):
